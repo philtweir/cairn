@@ -7,7 +7,11 @@ Disposition,Friendly
 Disposition,Neutral
 Disposition,Wary
 Disposition,Hostile
-Relic Kind,Relic
-Relic Kind,Weapon
-Relic Kind,Tool
-Relic Kind,Treasure
+Item Kind,Weapon
+Item Kind,Armor
+Item Kind,Transport
+Item Kind,Tool
+Item Kind,Relic
+Item Property,bulky
+Item Property,petty
+Item Property,slow

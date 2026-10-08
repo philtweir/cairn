@@ -8,6 +8,7 @@
   "scripts": {
     "check": "NODE_OPTIONS=--experimental-wasm-modules node src/build.mjs --check",
     "build": "NODE_OPTIONS=--experimental-wasm-modules node src/build.mjs",
+    "import-rules": "node src/import-rules.mjs",
     "serve": "python3 -m http.server 8000 --directory dist"
   },
   "dependencies": {

@@ -10,6 +10,7 @@ lifted into its own repo as-is.
 npm install
 npm run check    # validate everything, write nothing
 npm run build    # write dist/ (HTML) and dist/data/ (Arches-format JSON)
+npm run import-rules   # regenerate rules/ from the Cairn markdown (needs the cairn repo)
 npm run serve    # http://localhost:8000
 ```
 
@@ -24,22 +25,46 @@ CSV support). Alizarin is AGPL-3.0; keep that in mind before publishing anything
 | `model/<alias>.csv` | That model's fields (see below) |
 | `model/vocab.csv` | Controlled vocabularies: `collection_name,concept_label` |
 | `data/<alias>.csv` | The world itself, one row per entry |
-| `src/` | Build script, CSV helpers, HTML renderer |
+| `rules/<alias>.csv` | Generated reference data from the Cairn rules (see below); never edit |
+| `src/` | Build script, rules importer, CSV helpers, HTML renderer |
 
 ## Ontology
 
-A deliberately small CIDOC-CRM subset:
+A deliberately small CIDOC-CRM subset. Models come in two kinds: *instances* (your campaign) and
+*types* (the rules), and instances point at their type with `P2 has type`.
 
-| Model | CRM class | | Model | CRM class |
-|---|---|---|---|---|
-| Place | E53 Place | | Relic | E22 Human-Made Object |
-| Faction | E74 Group | | Event | E5 Event |
-| NPC | E21 Person | | Vocabularies | E55 Type (SKOS concepts) |
+| Instances | CRM class | Types | CRM class |
+|---|---|---|---|
+| Place | E53 Place | Background | E55 Type |
+| Faction | E74 Group | Monster Type | E55 Type |
+| NPC | E21 Person | Item Type | E55 Type |
+| Creature | E20 Biological Object | Vocabularies (SKOS) | E55 Type |
+| Relic | E22 Human-Made Object | | |
+| Event | E5 Event | | |
 
-Links use CRM properties where one fits (P89 falls within, P7 took place at, P11 had participant,
-P55 has current location, P52 has current owner, P107i member of, P74 residence). Faction
-alliances and enmities have no CRM equivalent, so they use `cairn:allied_with` / `cairn:hostile_to`.
-Cairn stats (HP, STR, DEX, WIL, Armor) are plain number fields; no ontology covers game mechanics.
+Links: NPC -> Background and Stat block (Monster Type); Creature -> Monster Type; Relic -> Item
+Type. Every type page lists the campaign entries that use it ("Linked from"). Other CRM properties
+used: P89 falls within, P7 took place at, P11 had participant, P55 has current location, P52 has
+current owner, P107i member of, P74 residence. Faction alliances and enmities have no CRM
+equivalent, so they use `cairn:allied_with` / `cairn:hostile_to`. Cairn stats are plain number
+fields; no ontology covers game mechanics.
+
+## Rules data (`rules/`)
+
+`npm run import-rules` reads a Cairn checkout (default: the parent directory) and writes:
+
+| File | Source | Rows |
+|---|---|---|
+| `monstertype.csv` | `resources/monsters/*.md` (1st-edition stat lines) | 145 |
+| `background.csv` | `second-edition/backgrounds/*.md` (names, starting gear) | 20 |
+| `itemtype.csv` | `second-edition/players-guide/marketplace.md` (armor, weapons, transport) | 27 |
+
+Not imported: the d6 origin tables, 2e bestiary prose, spells, services and hirelings. Gear is kept
+as text on Background, not linked to Item Types. The source text is CC-BY-SA 4.0; each row has a
+`source` field, and anything you publish built from it must credit and share alike.
+
+Campaign-specific types (a "Bell" item) go in `data/<alias>.csv`; rules and data rows merge, and
+keys must be unique across both.
 
 ## Authoring
 

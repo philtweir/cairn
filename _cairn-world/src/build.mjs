@@ -107,14 +107,23 @@ const businessCsv = (m, table, linkIds) => {
 };
 const isLinkCol = (m, col) => LINK_TYPES.has(m.nodes.find(n => n.alias === col)?.datatype);
 
+// rules/ holds generated reference data (see README), data/ holds the campaign. Rows from both
+// are merged per model; each row remembers its file for error messages.
 for (const m of models) {
-  const file = path.join(ROOT, `data/${m.alias}.csv`);
-  m.dataFile = file;
-  m.table = fs.existsSync(file) ? readTable(file) : { header: ['ResourceID'], rows: [] };
-  if (m.table.header[0] !== 'ResourceID') problem(`${rel(file)} first column must be ResourceID`);
-  for (const c of m.table.header.slice(1)) {
-    if (!m.nodes.some(n => n.alias === c)) problem(`${rel(file)} unknown column "${c}" (not in model/${m.alias}.csv)`);
+  const files = ['rules', 'data'].map(d => path.join(ROOT, d, `${m.alias}.csv`)).filter(f => fs.existsSync(f));
+  const tables = files.map(file => ({ file, ...readTable(file) }));
+  const header = ['ResourceID'];
+  for (const t of tables) {
+    if (t.header[0] !== 'ResourceID') problem(`${rel(t.file)} first column must be ResourceID`);
+    for (const c of t.header.slice(1)) {
+      if (!m.nodes.some(n => n.alias === c)) problem(`${rel(t.file)} unknown column "${c}" (not in model/${m.alias}.csv)`);
+      else if (!header.includes(c)) header.push(c);
+    }
   }
+  m.table = {
+    header,
+    rows: tables.flatMap(t => t.rows.map(r => ({ file: t.file, line: r.line, get: r.get, cells: header.map(c => r.get[c] ?? '') }))),
+  };
 }
 if (problems.length) bail();
 
@@ -124,11 +133,11 @@ for (const m of models) {
   idOf[m.alias] = new Map();
   const keep = m.table.header.map((c, j) => (j === 0 || !isLinkCol(m, c)) ? j : -1).filter(j => j >= 0);
   const text = toCsv([keep.map(j => m.table.header[j]), ...m.table.rows.map(r => keep.map(j => r.cells[j] ?? ''))]);
-  const out = safeBuild(m, text, rel(m.dataFile));
+  const out = safeBuild(m, text);
   if (!out) continue;
   out.forEach((res, i) => {
     const key = m.table.rows[i].cells[0];
-    if (idOf[m.alias].has(key)) problem(`${rel(m.dataFile)}:${m.table.rows[i].line} duplicate ResourceID "${key}"`);
+    if (idOf[m.alias].has(key)) problem(`${rel(m.table.rows[i].file)}:${m.table.rows[i].line} duplicate ResourceID "${key}"`);
     idOf[m.alias].set(key, res.resourceinstance.resourceinstanceid);
   });
 }
@@ -142,17 +151,17 @@ for (const m of models) {
     if (col === 'ResourceID' || !isLinkCol(mm, col)) return raw;
     const node = mm.nodes.find(n => n.alias === col);
     const keys = raw.split(',').map(s => s.trim()).filter(Boolean);
-    if (node.cardinality === '1' && keys.length > 1) problem(`${rel(mm.dataFile)}:${row.line} "${col}" takes one link, got ${keys.length}`);
+    if (node.cardinality === '1' && keys.length > 1) problem(`${rel(row.file)}:${row.line} "${col}" takes one link, got ${keys.length}`);
     return keys.map(k => {
       const hits = node.targets.filter(t => idOf[t].has(k));
       if (hits.length !== 1) {
-        problem(`${rel(mm.dataFile)}:${row.line} "${col}" -> "${k}" ${hits.length ? 'is ambiguous between ' + hits.join(', ') : 'not found in ' + node.targets.join('|')}`);
+        problem(`${rel(row.file)}:${row.line} "${col}" -> "${k}" ${hits.length ? 'is ambiguous between ' + hits.join(', ') : 'not found in ' + node.targets.join('|')}`);
         return '';
       }
       return idOf[hits[0]].get(k);
     }).join(',');
   });
-  resources[m.alias] = safeBuild(m, text, rel(m.dataFile)) ?? [];
+  resources[m.alias] = safeBuild(m, text) ?? [];
 }
 if (problems.length) bail();
 
@@ -180,11 +189,16 @@ for (const m of models) {
   }
 }
 
-function safeBuild(m, csv, label) {
+function safeBuild(m, csv) {
   try {
     return A.buildResourcesFromBusinessCsv(csv, m.built.graph, m.built.collections).business_data.resources;
   } catch (e) {
-    problem(`${label} ${String(e?.message ?? e).trim()}`);
+    // The loader reports "business_data.csv:N" against the merged text; point at the real file instead.
+    const msg = String(e?.message ?? e).trim().replace(/business_data\.csv:(\d+)/g, (whole, n) => {
+      const row = m.table.rows[Number(n) - 2];
+      return row ? `${rel(row.file)}:${row.line}` : whole;
+    });
+    problem(msg);
     return null;
   }
 }
@@ -271,7 +285,7 @@ async function readField(entity, node) {
 const entities = [];
 const classNames = [...graphManager.wkrms.keys()];
 for (const m of models) {
-  const className = classNames.find(k => k.toLowerCase() === m.name.toLowerCase());
+  const className = classNames.find(k => k.toLowerCase() === m.name.replace(/[^a-z0-9]/gi, '').toLowerCase());
   if (!className) throw new Error(`ORM has no model for ${m.name} (have ${classNames.join(', ')})`);
   const all = await (await graphManager.get(className)).all();
   const keyOfId = new Map([...idOf[m.alias]].map(([k, id]) => [id, k]));
