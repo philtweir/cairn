@@ -11,7 +11,8 @@ npm install
 npm run check    # validate everything, write nothing
 npm run build    # write dist/ (HTML) and dist/data/ (Arches-format JSON)
 npm run import-rules   # regenerate rules/ from the Cairn markdown (needs the cairn repo)
-npm run serve    # http://localhost:8000
+npm run serve    # http://localhost:8000/explorer/ (and /index.html for the static pages)
+npm run publish-pages  # copy dist/ to ../world/ for GitHub Pages
 ```
 
 Needs Node 22+. Alizarin is pinned to `2.0.0-beta.9` (the default npm tag is a stale 1.0.0 with no
@@ -26,7 +27,8 @@ CSV support). Alizarin is AGPL-3.0; keep that in mind before publishing anything
 | `model/vocab.csv` | Controlled vocabularies: `collection_name,concept_label` |
 | `data/<alias>.csv` | The world itself, one row per entry |
 | `rules/<alias>.csv` | Generated reference data from the Cairn rules (see below); never edit |
-| `src/` | Build script, rules importer, CSV helpers, HTML renderer |
+| `explorer/` | Browser explorer source (HTML, CSS, JS); bundled with Alizarin by the build |
+| `src/` | Build script, rules importer, CSV helpers, HTML renderer, shared ORM reader, publisher |
 
 ## Ontology
 
@@ -92,6 +94,57 @@ single `resource-instance` type stores a bare string that the ORM does not follo
 **Add a vocabulary term:** add a row to `model/vocab.csv`. Concept cells in the data must match a
 label exactly.
 
+## Explorer
+
+`npm run build` also produces `dist/explorer/`: a single-page app that loads the tile store with
+Alizarin's WASM ORM *in the browser* and uses it for everything it shows: a searchable list with
+model filters, a detail page per entry, "Linked from" backlinks, and a 1-hop relationship graph
+(click a node to move along it). URLs are `explorer/#/<model>/<key>`, so entries can be linked to.
+Rules reference entries (192 of them) are hidden by default and a checkbox reveals them; following a
+link to one reveals it automatically.
+
+The explorer and the Node build share `src/world-read.mjs`, so the static pages and the explorer
+read the world the same way.
+
+## The tile store (`dist/data/`)
+
+Plain JSON in Arches' own format, no server needed:
+
+| Path | Contents |
+|---|---|
+| `manifest.json` | Models, their fields, and every entry's id, key and origin (`rules` or `data`) |
+| `graphs.json`, `graphs/<id>.json` | Model index and full resource-model definitions |
+| `bundles/<graphid>.json` | All resources of one model; what the explorer loads |
+| `resources/<id>.json` | One resource, for lazy lookups |
+| `collections/<id>.json` | Vocabularies |
+| `index.json` | Graph id -> bundle files |
+
+A resource is `{ resourceinstance, tiles: [{ nodegroup_id, data: { <node id>: value } }] }`: one tile
+per field group, values keyed by node id. Output is deterministic (same CSVs, same bytes), so
+published diffs only show real changes.
+
+## Publishing to GitHub Pages
+
+This repo uses branch-based Pages with Jekyll at the root, so:
+
+```sh
+npm run build && npm run publish-pages     # writes <repo>/world/
+```
+
+then commit `world/`. It is served as plain static files at `<your Pages URL>/world/explorer/`
+(relative URLs, so any sub-path works). `_cairn-world/` itself is skipped by Jekyll because of the
+underscore. `publish-pages` refuses to overwrite a `world/` that it did not create.
+
+Things to know first:
+
+- **Pages sites are public.** Everything in `data/` ends up readable, including the JSON. Do not
+  put GM-only secrets in a world you publish.
+- **Size.** About 7 MB for the whole folder; most of it is Alizarin's 4.4 MB WASM, fetched once.
+- **Not verified:** I could not run Jekyll in the sandbox (its Liquid 4.0 breaks on Ruby 3.3), so
+  that `world/` passes through the real Jekyll build untouched is expected behaviour, not tested.
+  The explorer was tested over plain HTTP at both `/` and `/world/`, in Chromium at desktop and
+  phone widths.
+
 ## Gotchas found while building this
 
 - The CSV loader stores SKOS *concept* ids in tiles; the ORM looks up *value* ids (as Arches
@@ -105,7 +158,5 @@ label exactly.
 
 ## Using the data elsewhere
 
-`dist/data/` is plain Arches-format JSON (`graphs.json`, `graphs/`, `resources/`, `collections/`,
-plus `index.json` mapping each graph to its resource files). Alizarin's `ArchesClientLocal` (Node)
-and `ArchesClientRemoteStatic` (browser, same callback layout) can read it; `src/build.mjs` shows
-the wiring.
+The tile store above is readable by Alizarin's `ArchesClientLocal` (Node) and
+`ArchesClientRemoteStatic` (browser); `src/build.mjs` and `explorer/app.js` show the wiring for each.

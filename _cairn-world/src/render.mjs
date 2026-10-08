@@ -68,7 +68,7 @@ export function renderSite({ models, entities, outDir }) {
     return `<h2 id="${m.alias}">${esc(m.name)} (${items.length})</h2><ul>${items.map(e => `<li>${link(e, 0)}</li>`).join('')}</ul>`;
   }).join('');
   fs.writeFileSync(path.join(outDir, 'index.html'),
-    page('Cairn World', nav(0), `<h1>Cairn World</h1><p class="kind">${entities.length} entries</p>${sections}`, 0));
+    page('Cairn World', nav(0), `<h1>Cairn World</h1><p class="kind">${entities.length} entries</p><p><a href="explorer/index.html">Open the interactive explorer →</a></p>${sections}`, 0));
 
   // Entity pages
   for (const e of entities) {
