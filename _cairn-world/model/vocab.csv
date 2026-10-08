@@ -1,0 +1,13 @@
+collection_name,concept_label
+Place Kind,Region
+Place Kind,Settlement
+Place Kind,Site
+Place Kind,Landmark
+Disposition,Friendly
+Disposition,Neutral
+Disposition,Wary
+Disposition,Hostile
+Relic Kind,Relic
+Relic Kind,Weapon
+Relic Kind,Tool
+Relic Kind,Treasure

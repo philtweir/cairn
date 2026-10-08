@@ -1,0 +1,6 @@
+alias,name,ontology_class
+place,Place,E53_Place
+faction,Faction,E74_Group
+npc,NPC,E21_Person
+relic,Relic,E22_Human-Made_Object
+event,Event,E5_Event
